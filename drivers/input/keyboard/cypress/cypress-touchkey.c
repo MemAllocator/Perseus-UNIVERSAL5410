@@ -38,16 +38,6 @@
 #include "issp_extern.h"
 #include <linux/i2c/touchkey_i2c.h>
 
-static unsigned int qos_cpu_freq = 600000;
-static unsigned int qos_mif_freq = 800000;
-static unsigned int qos_mif2_freq = 400000;
-static unsigned int qos_int_freq = 200000;
-
-module_param(qos_cpu_freq, uint, S_IWUSR | S_IRUGO);
-module_param(qos_mif_freq, uint, S_IWUSR | S_IRUGO);
-module_param(qos_mif2_freq, uint, S_IWUSR | S_IRUGO);
-module_param(qos_int_freq, uint, S_IWUSR | S_IRUGO);
-
 static int touchkey_keycode[] = { 0,
 #if defined(TK_USE_4KEY_TYPE_ATT)
 	KEY_MENU, KEY_HOMEPAGE, KEY_BACK, KEY_SEARCH,
@@ -691,7 +681,7 @@ static void touchkey_change_dvfs_lock(struct work_struct *work)
 	mutex_lock(&tkey_i2c->tsk_dvfs_lock);
 
 	if (pm_qos_request_active(&tkey_i2c->tsk_mif_qos)) {
-		pm_qos_update_request(&tkey_i2c->tsk_mif_qos, qos_mif2_freq); /* MIF 400MHz */
+		pm_qos_update_request(&tkey_i2c->tsk_mif_qos, 400000); /* MIF 400MHz */
 		dev_dbg(&tkey_i2c->client->dev, "change_mif_dvfs_lock");
 	}
 
@@ -728,9 +718,9 @@ static void touchkey_set_dvfs_lock(struct touchkey_i2c *tkey_i2c,
 	} else if (on == 1) {
 		cancel_delayed_work(&tkey_i2c->tsk_work_dvfs_off);
 		if (!tkey_i2c->tsk_dvfs_lock_status) {
-			pm_qos_add_request(&tkey_i2c->tsk_cpu_qos, PM_QOS_CPU_FREQ_MIN, qos_cpu_freq); /* CPU KFC 1.2GHz */
-			pm_qos_add_request(&tkey_i2c->tsk_mif_qos, PM_QOS_BUS_THROUGHPUT, qos_mif_freq); /* MIF 800MHz */
-			pm_qos_add_request(&tkey_i2c->tsk_int_qos, PM_QOS_DEVICE_THROUGHPUT, qos_int_freq); /* INT 200MHz */
+			pm_qos_add_request(&tkey_i2c->tsk_cpu_qos, PM_QOS_CPU_FREQ_MIN, 600000); /* CPU KFC 1.2GHz */
+			pm_qos_add_request(&tkey_i2c->tsk_mif_qos, PM_QOS_BUS_THROUGHPUT, 800000); /* MIF 800MHz */
+			pm_qos_add_request(&tkey_i2c->tsk_int_qos, PM_QOS_DEVICE_THROUGHPUT, 200000); /* INT 200MHz */
 
 			schedule_delayed_work(&tkey_i2c->tsk_work_dvfs_chg,
 							msecs_to_jiffies(TOUCH_BOOSTER_CHG_TIME));
@@ -873,27 +863,9 @@ static int touchkey_firmware_update(struct touchkey_i2c *tkey_i2c)
 #endif
 
 #ifndef TEST_JIG_MODE
-
-static int mdnie_shortcut_enabled = 0;
-module_param_named(mdnie_shortcut_enabled, mdnie_shortcut_enabled, int, S_IRUGO | S_IWUSR | S_IWGRP);
-
-static inline int64_t get_time_inms(void) {
-	int64_t tinms;
-	struct timespec cur_time = current_kernel_time();
-	tinms =  cur_time.tv_sec * MSEC_PER_SEC;
-	tinms += cur_time.tv_nsec / NSEC_PER_MSEC;
-	return tinms;
-}
-
-extern void mdnie_toggle_negative(void);
-#define KEY_TRG_CNT 4
-#define KEY_TRG_MS  300
-
 static irqreturn_t touchkey_interrupt(int irq, void *dev_id)
 {
 	struct touchkey_i2c *tkey_i2c = dev_id;
-	static int64_t trigger_lasttime = 0;
-	static int trigger_count = -1;
 	u8 data[3];
 	int ret;
 	int retry = 10;
@@ -920,21 +892,6 @@ static irqreturn_t touchkey_interrupt(int irq, void *dev_id)
 	if (keycode_type <= 0 || keycode_type >= touchkey_count) {
 		dev_dbg(&tkey_i2c->client->dev, "keycode_type err\n");
 		return IRQ_HANDLED;
-	}
-
-	if ((touchkey_keycode[keycode_type] == KEY_MENU) && 
-		pressed && mdnie_shortcut_enabled)
-	{
-		if ((get_time_inms() - trigger_lasttime) < KEY_TRG_MS) {
-			if (++trigger_count >= KEY_TRG_CNT - 1) {
-				mdnie_toggle_negative();
-				trigger_count = 0;
-			}
-		} else {
-			trigger_count = 0;
-		}
-		
-		trigger_lasttime = get_time_inms();
 	}
 
 	input_report_key(tkey_i2c->input_dev,

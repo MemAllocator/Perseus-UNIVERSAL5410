@@ -11,6 +11,7 @@
 #include <linux/export.h>
 #include <linux/pm_runtime.h>
 #include <trace/events/rpm.h>
+#include <mach/sec_debug.h>
 #include "power.h"
 
 static int rpm_resume(struct device *dev, int rpmflags);
@@ -168,8 +169,9 @@ static int __rpm_callback(int (*cb)(struct device *), struct device *dev)
 	else
 		spin_unlock_irq(&dev->power.lock);
 
+	sec_debug_aux_log(SEC_DEBUG_AUXLOG_RUNTIME_PM_CHANGE, "before %pF %pF", cb, (dev->driver ? (dev->driver->pm ? dev->driver->pm : (void*)cb) : (void*)cb));
 	retval = cb(dev);
-
+	sec_debug_aux_log(SEC_DEBUG_AUXLOG_RUNTIME_PM_CHANGE, "after  %pF %pF ret=%d", cb, (dev->driver ? (dev->driver->pm ? dev->driver->pm : (void*)cb) : (void*)cb), retval);
 	if (dev->power.irq_safe)
 		spin_lock(&dev->power.lock);
 	else
@@ -388,6 +390,7 @@ static int rpm_suspend(struct device *dev, int rpmflags)
 		goto repeat;
 	}
 
+	dev->power.deferred_resume = false;
 	if (dev->power.no_callbacks)
 		goto no_callback;	/* Assume success. */
 
@@ -439,7 +442,6 @@ static int rpm_suspend(struct device *dev, int rpmflags)
 	wake_up_all(&dev->power.wait_queue);
 
 	if (dev->power.deferred_resume) {
-		dev->power.deferred_resume = false;
 		rpm_resume(dev, 0);
 		retval = -EAGAIN;
 		goto out;
@@ -584,7 +586,6 @@ static int rpm_resume(struct device *dev, int rpmflags)
 		    || dev->parent->power.runtime_status == RPM_ACTIVE) {
 			atomic_inc(&dev->parent->power.child_count);
 			spin_unlock(&dev->parent->power.lock);
-			retval = 1;
 			goto no_callback;	/* Assume success. */
 		}
 		spin_unlock(&dev->parent->power.lock);
@@ -665,7 +666,7 @@ static int rpm_resume(struct device *dev, int rpmflags)
 	}
 	wake_up_all(&dev->power.wait_queue);
 
-	if (retval >= 0)
+	if (!retval)
 		rpm_idle(dev, RPM_ASYNC);
 
  out:

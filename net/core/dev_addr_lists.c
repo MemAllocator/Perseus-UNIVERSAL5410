@@ -308,8 +308,7 @@ int dev_addr_del(struct net_device *dev, unsigned char *addr,
 	 */
 	ha = list_first_entry(&dev->dev_addrs.list,
 			      struct netdev_hw_addr, list);
-	if (!memcmp(ha->addr, addr, dev->addr_len) &&
-	    ha->type == addr_type && ha->refcount == 1)
+	if (ha->addr == dev->dev_addr && ha->refcount == 1)
 		return -ENOENT;
 
 	err = __hw_addr_del(&dev->dev_addrs, addr, dev->addr_len,
@@ -507,6 +506,10 @@ static int __dev_mc_add(struct net_device *dev, unsigned char *addr,
 {
 	int err;
 
+#ifdef CONFIG_WIFI_MULTICAST_LOG
+	printk("CONV_WIFI - %s: [%s] MULTICAST\n",
+				__FUNCTION__, dev->name);
+#endif
 	netif_addr_lock_bh(dev);
 	err = __hw_addr_add_ex(&dev->mc, addr, dev->addr_len,
 			       NETDEV_HW_ADDR_T_MULTICAST, global);
@@ -548,6 +551,10 @@ static int __dev_mc_del(struct net_device *dev, unsigned char *addr,
 	int err;
 
 	netif_addr_lock_bh(dev);
+#ifdef CONFIG_WIFI_MULTICAST_LOG
+	printk("CONV_WIFI - %s: [%s] MULTICAST\n",
+				__FUNCTION__, dev->name)
+#endif
 	err = __hw_addr_del_ex(&dev->mc, addr, dev->addr_len,
 			       NETDEV_HW_ADDR_T_MULTICAST, global);
 	if (!err)

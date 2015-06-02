@@ -305,13 +305,6 @@ __ATTR(_name, 0444, show_##_name, NULL)
 static struct global_attr _name =		\
 __ATTR(_name, 0644, show_##_name, store_##_name)
 
-ssize_t store_UV_mV_table(struct cpufreq_policy *policy,
-				 const char *buf, size_t count);
-ssize_t store_UV_uV_table(struct cpufreq_policy *policy,
-				 const char *buf, size_t count);
-
-ssize_t show_UV_mV_table(struct cpufreq_policy *policy, char *buf);
-ssize_t show_UV_uV_table(struct cpufreq_policy *policy, char *buf);
 
 /*********************************************************************
  *                        CPUFREQ 2.6. INTERFACE                     *
@@ -368,9 +361,6 @@ extern struct cpufreq_governor cpufreq_gov_userspace;
 #elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_ONDEMAND)
 extern struct cpufreq_governor cpufreq_gov_ondemand;
 #define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_ondemand)
-#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_ONDEMAND_SEC)
-extern struct cpufreq_governor cpufreq_gov_ondemand_sec;
-#define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_ondemand_sec)
 #elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_CONSERVATIVE)
 extern struct cpufreq_governor cpufreq_gov_conservative;
 #define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_conservative)

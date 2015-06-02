@@ -23,6 +23,8 @@
 #include <linux/battery/sec_charging_common.h>
 #if defined(ANDROID_ALARM_ACTIVATED)
 #include <linux/android_alarm.h>
+#else
+#include <linux/alarmtimer.h>
 #endif
 #include <linux/alarmtimer.h>
 #include <linux/wakelock.h>
@@ -48,6 +50,7 @@ struct sec_battery_info {
 	struct power_supply psy_bat;
 	struct power_supply psy_usb;
 	struct power_supply psy_ac;
+	struct power_supply psy_ps;
 	unsigned int irq;
 
 	int status;
@@ -129,6 +132,11 @@ struct sec_battery_info {
 
 	/* wireless charging enable*/
 	int wc_enable;
+
+	/* wearable charging */
+	int ps_enable;
+	int ps_status;
+	int ps_changed;
 
 	/* test mode */
 	int test_activated;
@@ -224,5 +232,4 @@ enum {
 #endif
 };
 
-void charger_control_init(struct sec_battery_info *info);
 #endif /* __SEC_BATTERY_H */

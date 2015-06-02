@@ -10,7 +10,6 @@
 #include <linux/mutex.h>
 #include <linux/mm.h>
 #include <linux/device.h>
-#include <linux/miscdevice.h>
 #include <linux/backlight.h>
 #include <linux/platform_device.h>
 #include <linux/delay.h>
@@ -29,8 +28,10 @@
 #include <mach/map.h>
 #include <plat/gpio-cfg.h>
 #include "mdnie.h"
-#if defined(CONFIG_LCD_MIPI_S6E8FA0)
+#if defined(CONFIG_LCD_MIPI_S6E8FA0) || defined(CONFIG_LCD_MIPI_S6E3FA0)
 #include "mdnie_table_j.h"
+#elif defined(CONFIG_LCD_LSL122BC01)
+#include "mdnie_table_v1.h"
 #endif
 #include "mdnie_color_tone.h"
 
@@ -132,7 +133,7 @@ static void get_lcd_size(unsigned int *xres, unsigned int *yres)
 	*yres |= (cfg & VIDTCON2_LINEVAL_E_MASK) ? (1 << 11) : 0;	/* 11 is MSB */
 }
 
-void mdnie_update(struct mdnie_info *mdnie, u8 force);
+static void mdnie_update(struct mdnie_info *mdnie, u8 force);
 
 int s3c_mdnie_set_size(void)
 {
@@ -163,10 +164,10 @@ int s3c_mdnie_set_size(void)
 	return 0;
 }
 
-static int mdnie_send_sequence(struct mdnie_info *mdnie, unsigned short *seq)
+static int mdnie_send_sequence(struct mdnie_info *mdnie, const unsigned short *seq)
 {
 	int ret = 0, i = 0;
-	unsigned short *wbuf = NULL;
+	const unsigned short *wbuf = NULL;
 
 	if (IS_ERR_OR_NULL(seq)) {
 		dev_err(mdnie->dev, "mdnie sequence is null\n");
@@ -180,12 +181,12 @@ static int mdnie_send_sequence(struct mdnie_info *mdnie, unsigned short *seq)
 
 	mutex_lock(&mdnie->dev_lock);
 
-	wbuf = mdnie_sequence_hook(seq);
+	wbuf = seq;
 
 	mdnie_mask();
 
 	while (wbuf[i] != END_SEQ) {
-		ret += mdnie_write(wbuf[i], mdnie_reg_hook(wbuf[i], wbuf[i+1]));
+		ret += mdnie_write(wbuf[i], wbuf[i+1]);
 		i += 2;
 	}
 
@@ -201,12 +202,6 @@ static struct mdnie_tuning_info *mdnie_request_table(struct mdnie_info *mdnie)
 	struct mdnie_tuning_info *table = NULL;
 
 	mutex_lock(&mdnie->lock);
-
-	/* it will be removed next year */
-	if (mdnie->negative == NEGATIVE_ON) {
-		table = &negative_table[mdnie->cabc];
-		goto exit;
-	}
 
 	if (ACCESSIBILITY_IS_VALID(mdnie->accessibility)) {
 		table = &accessibility_table[mdnie->cabc][mdnie->accessibility];
@@ -243,7 +238,7 @@ static void mdnie_update_sequence(struct mdnie_info *mdnie, struct mdnie_tuning_
 		mdnie_send_sequence(mdnie, table->sequence);
 }
 
-void mdnie_update(struct mdnie_info *mdnie, u8 force)
+static void mdnie_update(struct mdnie_info *mdnie, u8 force)
 {
 	struct mdnie_tuning_info *table = NULL;
 
@@ -581,45 +576,6 @@ static ssize_t tuning_store(struct device *dev,
 	return count;
 }
 
-static ssize_t negative_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	struct mdnie_info *mdnie = dev_get_drvdata(dev);
-
-	return sprintf(buf, "%d\n", mdnie->negative);
-}
-
-static ssize_t negative_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
-{
-	struct mdnie_info *mdnie = dev_get_drvdata(dev);
-	unsigned int value;
-	int ret;
-
-	ret = kstrtoul(buf, 0, (unsigned long *)&value);
-
-	dev_info(dev, "%s :: value=%d\n", __func__, value);
-
-	if (ret < 0)
-		return ret;
-	else {
-		if (mdnie->negative == value)
-			return count;
-
-		if (value >= NEGATIVE_MAX)
-			value = NEGATIVE_OFF;
-
-		value = (value) ? NEGATIVE_ON : NEGATIVE_OFF;
-
-		mutex_lock(&mdnie->lock);
-		mdnie->negative = value;
-		mutex_unlock(&mdnie->lock);
-
-		mdnie_update(mdnie, 0);
-	}
-	return count;
-}
-
 static ssize_t accessibility_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -773,7 +729,6 @@ static struct device_attribute mdnie_attributes[] = {
 	__ATTR(cabc, 0664, cabc_show, cabc_store),
 #endif
 	__ATTR(tuning, 0664, tuning_show, tuning_store),
-	__ATTR(negative, 0664, negative_show, negative_store),
 	__ATTR(accessibility, 0664, accessibility_show, accessibility_store),
 #if !defined(CONFIG_S5P_MDNIE_PWM)
 	__ATTR(color_correct, 0444, color_correct_show, NULL),
@@ -968,11 +923,6 @@ static const struct backlight_ops mdnie_backlight_ops = {
 };
 #endif
 
-static struct miscdevice mdnie_device = {
-	.minor = MISC_DYNAMIC_MINOR,
-	.name = "mdnie",
-};
-
 static int mdnie_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -1005,14 +955,10 @@ static int mdnie_probe(struct platform_device *pdev)
 		goto error2;
 	}
 
-	ret = misc_register(&mdnie_device);
-	init_intercept_control(&mdnie_device.this_device->kobj);
-
 	mdnie->scenario = UI_MODE;
 	mdnie->mode = STANDARD;
 	mdnie->enable = FALSE;
 	mdnie->tuning = FALSE;
-	mdnie->negative = NEGATIVE_OFF;
 	mdnie->accessibility = ACCESSIBILITY_OFF;
 	mdnie->cabc = CABC_OFF;
 	mdnie->bypass = BYPASS_OFF;
@@ -1094,17 +1040,6 @@ static int mdnie_remove(struct platform_device *pdev)
 	return 0;
 }
 
-void mdnie_toggle_negative(void)
-{
-	mutex_lock(&g_mdnie->lock);
-	g_mdnie->negative = (g_mdnie->negative == NEGATIVE_ON) ? NEGATIVE_OFF : NEGATIVE_ON;
-	mutex_unlock(&g_mdnie->lock);
-
-	printk("%s: %d\n", __func__, g_mdnie->negative);
-
-	mdnie_update(g_mdnie, 0);
-}
-
 static struct platform_driver mdnie_driver = {
 	.driver		= {
 		.name	= "mdnie",
@@ -1131,3 +1066,4 @@ module_exit(mdnie_exit);
 
 MODULE_DESCRIPTION("mDNIe Driver");
 MODULE_LICENSE("GPL");
+

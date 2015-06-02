@@ -60,7 +60,7 @@
 #define NR_TO_RECLAIM_PAGES 		(1024*2) /* 8MB, include file pages */
 #define MIN_FREESWAP_PAGES 		(NR_TO_RECLAIM_PAGES*2*NR_CPUS)
 #define MIN_RECLAIM_PAGES 		(NR_TO_RECLAIM_PAGES/8)
-#define MIN_CSWAP_INTERVAL 		(10*HZ) /* 10 senconds */
+#define MIN_CSWAP_INTERVAL 		(5*HZ) /* 5 senconds */
 #else /* CONFIG_SMP */
 #define NR_TO_RECLAIM_PAGES 		1024 /* 4MB, include file pages */
 #define MIN_FREESWAP_PAGES 		(NR_TO_RECLAIM_PAGES*2)
@@ -237,14 +237,17 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	int selected_tasksize = 0;
 	int selected_oom_score_adj;
 #endif
+#ifdef CONFIG_SAMP_HOTNESS
+	int selected_hotness_adj = 0;
+#endif
 	int array_size = ARRAY_SIZE(lowmem_adj);
 	int other_free = global_page_state(NR_FREE_PAGES) - totalreserve_pages;
 	int other_file = global_page_state(NR_FILE_PAGES) -
 						global_page_state(NR_SHMEM);
 	struct zone *zone;
 
-#ifdef CONFIG_ZRAM_FOR_ANDROID
-	other_file -= total_swapcache_pages();
+#if defined(CONFIG_ZRAM_FOR_ANDROID) || defined(CONFIG_ZSWAP)
+	other_file -= total_swapcache_pages;
 #endif
 
 	if (offlining) {
@@ -322,7 +325,9 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 #ifdef ENHANCED_LMK_ROUTINE
 		int is_exist_oom_task = 0;
 #endif
-
+#ifdef CONFIG_SAMP_HOTNESS
+		int hotness_adj = 0;
+#endif
 		if (tsk->flags & PF_KTHREAD)
 			continue;
 
@@ -336,6 +341,9 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 			continue;
 		}
 		tasksize = get_mm_rss(p->mm);
+#ifdef CONFIG_SAMP_HOTNESS
+		hotness_adj = p->signal->hotness_adj;
+#endif
 		task_unlock(p);
 		if (tasksize <= 0)
 			continue;
@@ -379,15 +387,29 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 		}
 #else
 		if (selected) {
+#ifdef CONFIG_SAMP_HOTNESS
+			if (min_score_adj <= lowmem_adj[4]) {
+#endif
 			if (oom_score_adj < selected_oom_score_adj)
 				continue;
 			if (oom_score_adj == selected_oom_score_adj &&
 			    tasksize <= selected_tasksize)
 				continue;
+#ifdef CONFIG_SAMP_HOTNESS
+			} else {
+				if (hotness_adj > selected_hotness_adj)
+					continue;
+				if (hotness_adj == selected_hotness_adj && tasksize <= selected_tasksize)
+					continue;
+			}
+#endif
 		}
 		selected = p;
 		selected_tasksize = tasksize;
 		selected_oom_score_adj = oom_score_adj;
+#ifdef CONFIG_SAMP_HOTNESS
+		selected_hotness_adj = hotness_adj;
+#endif	
 		lowmem_print(2, "select %d (%s), adj %d, size %d, to kill\n",
 			     p->pid, p->comm, oom_score_adj, tasksize);
 #endif
@@ -395,11 +417,20 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 #ifdef ENHANCED_LMK_ROUTINE
 	for (i = 0; i < LOWMEM_DEATHPENDING_DEPTH; i++) {
 		if (selected[i]) {
+#ifdef CONFIG_SAMP_HOTNESS	
+			lowmem_print(1, "send sigkill to %d (%s), adj %d,\
+				     size %d ,hotness %d\n",
+				     selected[i]->pid, selected[i]->comm,
+				     selected_oom_score_adj[i],
+				     selected_tasksize[i],
+					 selected_hotness_adj);
+#else
 			lowmem_print(1, "send sigkill to %d (%s), adj %d,\
 				     size %d\n",
 				     selected[i]->pid, selected[i]->comm,
 				     selected_oom_score_adj[i],
 				     selected_tasksize[i]);
+#endif
 			lowmem_deathpending[i] = selected[i];
 			lowmem_deathpending_timeout = jiffies + HZ;
 			send_sig(SIGKILL, selected[i], 0);
@@ -411,9 +442,15 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	}
 #else
 	if (selected) {
+#ifdef CONFIG_SAMP_HOTNESS
+		lowmem_print(1, "send sigkill to %d (%s), adj %d, size %d ,hotness %d\n",
+			     selected->pid, selected->comm,
+			     selected_oom_score_adj, selected_tasksize,selected_hotness_adj);
+#else
 		lowmem_print(1, "send sigkill to %d (%s), adj %d, size %d\n",
 			     selected->pid, selected->comm,
 			     selected_oom_score_adj, selected_tasksize);
+#endif
 		lowmem_deathpending_timeout = jiffies + HZ;
 		send_sig(SIGKILL, selected, 0);
 		set_tsk_thread_flag(selected, TIF_MEMDIE);
@@ -946,10 +983,13 @@ static int do_compcache(void * nothing)
 		if (kthread_should_stop())
 			break;
 
-		if (rtcc_reclaim_pages(number_of_reclaim_pages) < minimum_reclaim_pages)
-			cancel_soft_reclaim();
+		if (atomic_read(&s_reclaim.kcompcached_running) == 1) {
+			if (rtcc_reclaim_pages(number_of_reclaim_pages) < minimum_reclaim_pages)
+				cancel_soft_reclaim();
 
-		atomic_set(&s_reclaim.kcompcached_running, 0);
+			atomic_set(&s_reclaim.kcompcached_running, 0);
+		}
+
 		set_current_state(TASK_INTERRUPTIBLE);
 		schedule();
 	}

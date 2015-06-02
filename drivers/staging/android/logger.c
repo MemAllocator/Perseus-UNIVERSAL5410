@@ -30,9 +30,6 @@
 #include <asm/ioctls.h>
 #include <mach/sec_debug.h>
 
-static unsigned int enabled = 1;
-module_param(enabled, uint, S_IWUSR | S_IRUGO);
-
 /*
  * struct logger_log - represents a specific log, such as 'main' or 'radio'
  *
@@ -470,9 +467,6 @@ ssize_t logger_aio_write(struct kiocb *iocb, const struct iovec *iov,
 	struct timespec now;
 	ssize_t ret = 0;
 
-	if (!enabled)
-		return 0;
-
 	now = current_kernel_time();
 
 	header.pid = current->tgid;
@@ -582,12 +576,14 @@ static int logger_release(struct inode *ignored, struct file *file)
 	if (file->f_mode & FMODE_READ) {
 		struct logger_reader *reader = file->private_data;
 		struct logger_log *log = reader->log;
-
+		unsigned long start = jiffies;
 		mutex_lock(&log->mutex);
 		list_del(&reader->list);
 		mutex_unlock(&log->mutex);
 
 		kfree(reader);
+		pr_info("%s: took %d msec\n", __func__,
+			jiffies_to_msecs(jiffies - start));
 	}
 
 	return 0;

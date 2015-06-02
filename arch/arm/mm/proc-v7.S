@@ -251,6 +251,11 @@ __v7_setup:
 	orreq	r10, r10, #1 << 22		@ set bit #22
 	mcreq	p15, 0, r10, c15, c0, 1		@ write diagnostic register
 #endif
+#ifdef CONFIG_ARM_ERRATA_761320
+	mrc	p15, 0, r10, c15, c0, 1		@ read diagnostic register
+	orr	r10, r10, #1 << 21		@ set bit #21
+	mcr	p15, 0, r10, c15, c0, 1		@ write diagnostic register
+#endif
 #ifdef CONFIG_ARM_ERRATA_743622
 	teq	r5, #0x00200000			@ only present in r2p*
 	mrceq	p15, 0, r10, c15, c0, 1		@ read diagnostic register
@@ -276,17 +281,6 @@ __v7_setup:
 #ifdef CONFIG_ARM_TRUSTZONE
 	stmia	r12, {r0-r3}
 	mov	r3, #0
-#endif
-/* Enable Non-cacheable streaming enhancement */
-	mrc	p15, 0, r10, c1, c0, 1		@ read aux control register
-	orr	r10, r10, #1 << 24		@ set bit #24
-#ifdef CONFIG_ARM_TRUSTZONE
-	ldr	r0, =SMC_CMD_REG
-	ldr	r1, =SMC_REG_ID_CP15(1, 0, 0, 1)
-	mov	r2, r10
-	smc	0
-#else
-	mcr	p15, 0, r10, c1, c0, 1		@ write aux control register
 #endif
 #ifdef CONFIG_ARM_ERRATA_773022
 	teq	r6, #0x4			@ present in r0p4

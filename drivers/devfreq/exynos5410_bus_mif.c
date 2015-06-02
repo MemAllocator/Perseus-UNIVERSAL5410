@@ -13,9 +13,7 @@
 #include <linux/suspend.h>
 #include <linux/opp.h>
 #include <linux/list.h>
-#include <linux/rculist.h>
 #include <linux/device.h>
-#include <linux/sysfs_helpers.h>
 #include <linux/devfreq.h>
 #include <linux/platform_device.h>
 #include <linux/module.h>
@@ -23,7 +21,6 @@
 #include <linux/reboot.h>
 #include <linux/kobject.h>
 #include <linux/delay.h>
-#include <linux/errno.h>
 
 #include <mach/regs-clock.h>
 #include <mach/regs-pmu.h>
@@ -37,18 +34,16 @@
 
 #include "noc_probe.h"
 #include "exynos5410_volt_ctrl.h"
+#include <mach/sec_debug.h>
 
-#define MIF_VOLT_STEP		12500
-#define SAFE_VOLT(x)		(x + 25000)
-
-struct exynos5_volt_info exynos5_vdd_mif = {
-	.idx	= VDD_MIF,
-};
-
-#if defined(CONFIG_REGULATOR_S2MPS11)
-struct exynos5_volt_info exynos5_vdd_memio = {
-	.idx	= VDD_MEMIO,
-};
+#ifdef CONFIG_ASV_MARGIN_TEST
+static int set_mif_freq = 0;
+static int __init get_mif_freq(char *str)
+{
+	get_option(&str, &set_mif_freq);
+	return 0;
+}
+early_param("miffreq", get_mif_freq);
 #endif
 
 static bool en_profile = false;
@@ -120,23 +115,18 @@ struct mif_bus_opp_table {
 	unsigned int idx;
 	unsigned long clk;
 	unsigned long volt;
-	unsigned long memio_volt;
 	cputime64_t time_in_state;
 };
 
 struct mif_bus_opp_table mif_bus_opp_list[] = {
-#if defined(CONFIG_TARGET_LOCALE_EUR) && defined(CONFIG_REGULATOR_S2MPS11)
-	{LV_0, 800000, 1062500, 1250000, 0},
-#else
-	{LV_0, 800000, 1062500, 1200000, 0},
-#endif
-	{LV_1, 667000, 1062500, 1200000, 0},
-	{LV_2, 533000, 1062500, 1200000, 0},
-	{LV_3, 400000, 1062500, 1200000, 0},
-	{LV_4, 267000, 1062500, 1200000, 0},
-	{LV_5, 200000, 1062500, 1200000, 0},
-	{LV_6, 160000, 1062500, 1200000, 0},
-	{LV_7, 100000, 1062500, 1200000, 0},
+	{LV_0, 800000, 1062500, 0},
+	{LV_1, 667000, 1062500, 0},
+	{LV_2, 533000, 1062500, 0},
+	{LV_3, 400000, 1062500, 0},
+	{LV_4, 267000, 1062500, 0},
+	{LV_5, 200000, 1062500, 0},
+	{LV_6, 160000, 1062500, 0},
+	{LV_7, 100000, 1062500, 0},
 };
 
 struct mif_regs_value {
@@ -190,6 +180,7 @@ static unsigned int exynos5410_clkdiv_g2d[][2] = {
 };
 
 static unsigned int exynos5410_bpll_pms_value[][3] = {
+#ifndef BPLL_S_ONLY_CHANGE	/* PMS change method has some problem */
 	{3, 200, 1},	/* 800Mhz */
 	{3, 167, 1},	/* 667Mhz */
 	{3, 266, 2},	/* 533Mhz */
@@ -198,6 +189,16 @@ static unsigned int exynos5410_bpll_pms_value[][3] = {
 	{3, 200, 3},	/* 200Mhz */
 	{3, 160, 3},	/* 160Mhz */
 	{3, 200, 4},	/* 100Mhz */
+#else				/* S value only change */
+	{3, 200, 1},	/* 800Mhz */
+	{3, 200, 1},	/* 667Mhz Invalid */
+	{3, 200, 1},	/* 533Mhz Invalid */
+	{3, 200, 2},	/* 400Mhz */
+	{3, 200, 2},	/* 267Mhz Invalid */
+	{3, 200, 3},	/* 200Mhz */
+	{3, 200, 3},	/* 160Mhz Invalid */
+	{3, 200, 4},	/* 100Mhz */
+#endif
 };
 
 static unsigned int exynos5410_dram_param[][3] = {
@@ -471,6 +472,24 @@ static void exynos5_mif_set_freq(unsigned long target_freq)
 		   (target_mif_clkdiv->target_pms.s << PLL2550_SDIV_SHIFT));
 
 	if (mif_is_need_pms_change(old_pms, new_pms)) {
+#ifndef BPLL_S_ONLY_CHANGE
+		/* Setup BPLL FOUT with divide 2 for S value */
+		tmp = __raw_readl(EXYNOS5_BPLL_CON0);
+
+		tmp &= ~((PLL2550_MDIV_MASK << PLL2550_MDIV_SHIFT) |
+			 (PLL2550_PDIV_MASK << PLL2550_PDIV_SHIFT) |
+			 (PLL2550_SDIV_MASK << PLL2550_SDIV_SHIFT));
+
+		tmp |= target_mif_clkdiv->target_pms.p << PLL2550_PDIV_SHIFT;
+		tmp |= target_mif_clkdiv->target_pms.m << PLL2550_MDIV_SHIFT;
+		tmp |= (target_mif_clkdiv->target_pms.s + 1) << PLL2550_SDIV_SHIFT;
+
+		__raw_writel(tmp, EXYNOS5_BPLL_CON0);
+
+		do {
+			tmp = __raw_readl(EXYNOS5_BPLL_CON0);
+		} while (!(tmp & (0x1 << PLL2550_LOCKED)));
+#endif
 		/* Setup BPLL FOUT with real divide value */
 		tmp = __raw_readl(EXYNOS5_BPLL_CON0);
 
@@ -483,10 +502,6 @@ static void exynos5_mif_set_freq(unsigned long target_freq)
 		tmp |= target_mif_clkdiv->target_pms.s << PLL2550_SDIV_SHIFT;
 
 		__raw_writel(tmp, EXYNOS5_BPLL_CON0);
-
-		do {
-			tmp = __raw_readl(EXYNOS5_BPLL_CON0);
-		} while (!(tmp & (0x1 << PLL2550_LOCKED)));
 	}
 }
 
@@ -533,7 +548,7 @@ unsigned int g_miffreq;
 static int exynos5_mif_busfreq_target(struct device *dev,
 				      unsigned long *_freq, u32 flags)
 {
-	int i, err = 0;
+	int err = 0;
 	struct platform_device *pdev = container_of(dev, struct platform_device, dev);
 	struct busfreq_data_mif *data = platform_get_drvdata(pdev);
 	struct opp *opp;
@@ -541,7 +556,6 @@ static int exynos5_mif_busfreq_target(struct device *dev,
 	unsigned long freq;
 	unsigned long old_freq;
 	unsigned long target_volt;
-	unsigned int target_idx = LV_0;
 
 	mutex_lock(&data->lock);
 
@@ -583,11 +597,19 @@ static int exynos5_mif_busfreq_target(struct device *dev,
 	 * after change voltage, setting freq ratio
 	 */
 	if (old_freq < freq) {
-		regulator_set_voltage(exynos5_vdd_mif.vdd_target, target_volt, SAFE_VOLT(target_volt));
+		err = exynos5_volt_ctrl(VDD_MIF, target_volt, freq);
+
+		if (err)
+			goto out;
 
 		exynos5_mif_set_drex(freq);
 
 		exynos5_mif_bpll_transition_notify(&info, MIF_DEVFREQ_PRECHANGE);
+
+		sec_debug_aux_log(SEC_DEBUG_AUXLOG_CPU_CLOCK_SWITCH_CHANGE,
+			"[MIF] old:%7d new:%7d",
+			old_freq, freq);
+
 		exynos5_mif_set_freq(freq);
 		exynos5_mif_bpll_transition_notify(&info, MIF_DEVFREQ_POSTCHANGE);
 
@@ -598,25 +620,21 @@ static int exynos5_mif_busfreq_target(struct device *dev,
 			exynos5_clkm_gate(false);
 
 		exynos5_mif_bpll_transition_notify(&info, MIF_DEVFREQ_PRECHANGE);
+
+		sec_debug_aux_log(SEC_DEBUG_AUXLOG_CPU_CLOCK_SWITCH_CHANGE,
+			"[MIF] old:%7d new:%7d",
+			old_freq, freq);
+
 		exynos5_mif_set_freq(freq);
 		exynos5_mif_bpll_transition_notify(&info, MIF_DEVFREQ_POSTCHANGE);
 
 		exynos5_mif_set_drex(freq);
 
-		regulator_set_voltage(exynos5_vdd_mif.vdd_target, target_volt, SAFE_VOLT(target_volt));
+		err = exynos5_volt_ctrl(VDD_MIF, target_volt, freq);
+
+		if (err)
+			goto out;
 	}
-
-
-	for (i = LV_0; i < LV_END; i++)
-		if (mif_bus_opp_list[i].clk == freq)
-			target_idx = mif_bus_opp_list[i].idx;
-
-	if (exynos5_vdd_memio.set_volt != mif_bus_opp_list[target_idx].memio_volt) {
-		exynos5_vdd_memio.set_volt = mif_bus_opp_list[target_idx].memio_volt;
-		regulator_set_voltage(exynos5_vdd_memio.vdd_target,
-					exynos5_vdd_memio.set_volt, SAFE_VOLT(exynos5_vdd_memio.set_volt));
-	}
-
 
 	bts_change_bustraffic(&info, MIF_DEVFREQ_POSTCHANGE);
 
@@ -716,8 +734,8 @@ static int exynos5410_mif_table(struct busfreq_data_mif *data)
 		}
 	}
 
-#if 1
-	pr_info("Factor of 2 frequencies only\n");
+#ifdef BPLL_S_ONLY_CHANGE
+	pr_info("S divider change for DFS of MIF block\n");
 	opp_disable(data->dev, 667000);
 	opp_disable(data->dev, 533000);
 	opp_disable(data->dev, 267000);
@@ -924,138 +942,6 @@ static ssize_t show_freq_table(struct device *dev, struct device_attribute *attr
 
 static DEVICE_ATTR(freq_table, S_IRUGO, show_freq_table, NULL);
 
-static ssize_t show_volt_table(struct device *device,
-		struct device_attribute *attr, char *buf)
-{	
-	struct device_opp *dev_opp = ERR_PTR(-ENODEV);
-	struct opp *temp_opp;
-	int len = 0;
-
-	dev_opp = find_device_opp(mif_dev);
-
-	list_for_each_entry_rcu(temp_opp, &dev_opp->opp_list, node) {
-		if (temp_opp->available)
-			len += sprintf(buf + len, "%lu %lu\n",
-					opp_get_freq(temp_opp),
-					opp_get_voltage(temp_opp));
-	}
-
-	return len;
-}
-
-static ssize_t store_volt_table(struct device *device,
-		struct device_attribute *attr,
-		const char *buf, size_t count)
-{
-	struct device_opp *dev_opp = find_device_opp(mif_dev);
-	struct opp *temp_opp;
-	int u[LV_END];
-	int rest, t, i = 0;
-
-	if ((t = read_into((int*)&u, LV_END, buf, count)) < 0)
-		return -EINVAL;
-
-	if (t == 2 && LV_END != 2) {
-		temp_opp = opp_find_freq_exact(mif_dev, u[0], true);
-		if(IS_ERR(temp_opp))
-			return -EINVAL;
-
-		if ((rest = (u[1] % 6250)) != 0)
-			u[1] += 6250 - rest;
-
-		sanitize_min_max(u[1], 600000, 1300000);
-		temp_opp->u_volt = u[1];
-	} else {
-		list_for_each_entry_rcu(temp_opp, &dev_opp->opp_list, node) {
-			if (temp_opp->available) {
-				if ((rest = (u[i] % 6250)) != 0)
-					u[i] += 6250 - rest;
-
-				sanitize_min_max(u[i], 600000, 1300000);
-				temp_opp->u_volt = u[i++];
-			}
-		}
-	}
-
-	return count;
-}
-
-static DEVICE_ATTR(volt_table, S_IRUGO | S_IWUSR, show_volt_table, store_volt_table);
-
-static ssize_t show_memio_volt_table(struct device *device,
-		struct device_attribute *attr, char *buf)
-{	
-	struct device_opp *dev_opp = ERR_PTR(-ENODEV);
-	struct opp *temp_opp;
-	long unsigned int freq;
-	int i, len = 0;
-
-	dev_opp = find_device_opp(mif_dev);
-
-	list_for_each_entry_rcu(temp_opp, &dev_opp->opp_list, node) {
-		if (temp_opp->available) {
-			freq = opp_get_freq(temp_opp);
-
-			for (i = 0; i < ARRAY_SIZE(mif_bus_opp_list); i++)
-				if (mif_bus_opp_list[i].clk == freq) break;
-
-			len += sprintf(buf + len, "%lu %lu\n", freq,
-					mif_bus_opp_list[i].memio_volt);
-		}
-	}
-
-	return len;
-}
-
-static ssize_t store_memio_volt_table(struct device *device,
-		struct device_attribute *attr,
-		const char *buf, size_t count)
-{
-	struct device_opp *dev_opp = find_device_opp(mif_dev);
-	struct opp *temp_opp;
-	int u[LV_END];
-	int rest, freq, t, k, i = 0;
-
-	if ((t = read_into((int*)&u, LV_END, buf, count)) < 0)
-		return -EINVAL;
-
-	if (t == 2 && LV_END != 2) {
-		temp_opp = opp_find_freq_exact(mif_dev, u[0], true);
-		if(IS_ERR(temp_opp))
-			return -EINVAL;
-
-		if ((rest = (u[1] % 6250)) != 0)
-			u[1] += 6250 - rest;
-
-		sanitize_min_max(u[1], 600000, 1300000);
-
-		freq = opp_get_freq(temp_opp);
-		for (k = 0; k < ARRAY_SIZE(mif_bus_opp_list); k++)
-			if (mif_bus_opp_list[k].clk == freq) break;
-
-		mif_bus_opp_list[k].memio_volt = u[1];
-	} else {
-		list_for_each_entry_rcu(temp_opp, &dev_opp->opp_list, node) {
-			if (temp_opp->available) {
-				if ((rest = (u[i] % 6250)) != 0)
-					u[i] += 6250 - rest;
-
-				sanitize_min_max(u[i], 600000, 1300000);
-				
-				freq = opp_get_freq(temp_opp);
-				for (k = 0; k < ARRAY_SIZE(mif_bus_opp_list); k++)
-					if (mif_bus_opp_list[k].clk == freq) break;
-
-				mif_bus_opp_list[k].memio_volt = u[i++];
-			}
-		}
-	}
-
-	return count;
-}
-
-static DEVICE_ATTR(memio_volt_table, S_IRUGO | S_IWUSR, show_memio_volt_table, store_memio_volt_table);
-
 static ssize_t show_en_monitoring(struct device *dev, struct device_attribute *attr,
 				  char *buf)
 {
@@ -1073,7 +959,7 @@ static ssize_t store_en_monitoring(struct device *dev, struct device_attribute *
 
 	if (input) {
 		exynos5_mif_governor_data.en_monitoring = true;
-		//pm_qos_update_request(&exynos5_mif_qos, 200000);
+		pm_qos_update_request(&exynos5_mif_qos, 200000);
 		exynos5_mif_notify_transition(NULL, MIF_DEVFREQ_EN_MONITORING);
 	} else {
 		exynos5_mif_governor_data.en_monitoring = false;
@@ -1087,7 +973,7 @@ static DEVICE_ATTR(en_monitoring, S_IRUGO | S_IWUSR,
 			show_en_monitoring, store_en_monitoring);
 
 static struct exynos_devfreq_platdata default_qos_mif_pd = {
-	.default_qos = 100000, //160000,
+	.default_qos = 160000,
 };
 
 static int exynos5_mif_reboot_notifier_call(struct notifier_block *this,
@@ -1124,7 +1010,6 @@ static int exynos5_mif_cpufreq_notifier_call(struct notifier_block *this,
 	else
 		type = CPUFREQ_POSTCHANGE;
 
-/*
 	if (type == code) {
 		if (freq->new <= 500000)
 			pm_qos_update_request(&exynos5_mif_qos, 200000);
@@ -1133,7 +1018,7 @@ static int exynos5_mif_cpufreq_notifier_call(struct notifier_block *this,
 		else if (freq->new > 600000)
 			pm_qos_update_request(&exynos5_mif_qos, 800000);
 	}
-*/
+
 	return NOTIFY_DONE;
 }
 
@@ -1203,14 +1088,14 @@ static int exynos5_bus_mif_tmu_notifier(struct notifier_block *notifier,
 		break;
 	case MEM_TH_LV2:
 		/*
-		 * In case of temperature increment, set MIF level 200Mhz as minimum
+		 * In case of temperature increment, set MIF level 400Mhz as minimum
 		 * before changing dram refresh counter.
 		 */
-		if (*on < TMU_109) {
+		if (*on < MEM_TH_LV2) {
 			if (pm_qos_request_active(&min_mif_thermal_qos))
-				pm_qos_update_request(&min_mif_thermal_qos, 200000);
+				pm_qos_update_request(&min_mif_thermal_qos, 400000);
 			else
-				pm_qos_add_request(&min_mif_thermal_qos, PM_QOS_BUS_THROUGHPUT, 200000);
+				pm_qos_add_request(&min_mif_thermal_qos, PM_QOS_BUS_THROUGHPUT, 400000);
 		}
 
 		exynos_smc(SMC_CMD_REG, SMC_REG_ID_SFR_W(EXYNOS5_PA_DREXI_0 + DREX_TIMINGAREF),
@@ -1218,16 +1103,18 @@ static int exynos5_bus_mif_tmu_notifier(struct notifier_block *notifier,
 		exynos_smc(SMC_CMD_REG, SMC_REG_ID_SFR_W(EXYNOS5_PA_DREXI_1 + DREX_TIMINGAREF),
 				AREF_HOT, 0);
 
+#if 0 // In case LV2 and LV3, Set MIF level 400Mhz as minimum
 		/*
 		 * In case of temperature decrement, set MIF level 200Mhz as minimum
 		 * after changing dram refresh counter.
 		 */
-		if (*on > TMU_109) {
+		if (*on > MEM_TH_LV2) {
 			if (pm_qos_request_active(&min_mif_thermal_qos))
 				pm_qos_update_request(&min_mif_thermal_qos, 200000);
 			else
 				pm_qos_add_request(&min_mif_thermal_qos, PM_QOS_BUS_THROUGHPUT, 200000);
 		}
+#endif
 
 		break;
 	case MEM_TH_LV3:
@@ -1305,30 +1192,6 @@ static __devinit int exynos5_busfreq_mif_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
-	/* MIF Setting regulator inform */
-	exynos5_vdd_mif.vdd_target = regulator_get(NULL, "vdd_mif");
-
-	if (IS_ERR(exynos5_vdd_mif.vdd_target)) {
-		pr_err("Cannot get the regulator vdd_mif\n");
-		err = PTR_ERR(exynos5_vdd_mif.vdd_target);
-	}
-
-	exynos5_vdd_mif.set_volt = regulator_get_voltage(exynos5_vdd_mif.vdd_target);
-	exynos5_vdd_mif.target_volt = exynos5_vdd_mif.set_volt;
-
-#if defined(CONFIG_REGULATOR_S2MPS11)
-	/* MEMIO Setting regulator inform */
-	exynos5_vdd_memio.vdd_target = regulator_get(NULL, "vdd_mem2");
-
-	if (IS_ERR(exynos5_vdd_memio.vdd_target)) {
-		pr_err("Cannot get the regulator vdd_mem2\n");
-		err = PTR_ERR(exynos5_vdd_memio.vdd_target);
-	}
-
-	exynos5_vdd_memio.set_volt = regulator_get_voltage(exynos5_vdd_memio.vdd_target);
-	exynos5_vdd_memio.target_volt = exynos5_vdd_memio.set_volt;
-#endif
-
 	/* Enable pause function for DREX2 DVFS */
 	tmp = __raw_readl(EXYNOS5_DMC_PAUSE_CTRL);
 	tmp |= EXYNOS5_DMC_PAUSE_ENABLE;
@@ -1403,16 +1266,6 @@ static __devinit int exynos5_busfreq_mif_probe(struct platform_device *pdev)
 	if (err)
 		pr_err("%s: Fail to create sysfs file\n", __func__);
 
-	/* Add sysfs for MIF volt_table */
-	err = device_create_file(&data->devfreq->dev, &dev_attr_volt_table);
-	if (err)
-		pr_err("%s: Fail to create sysfs file\n", __func__);
-
-	/* Add sysfs for MEMIO volt_table */
-	err = device_create_file(&data->devfreq->dev, &dev_attr_memio_volt_table);
-	if (err)
-		pr_err("%s: Fail to create sysfs file\n", __func__);
-
 	/* Add sysfs for en_monitoring */
 	err = device_create_file(&data->devfreq->dev, &dev_attr_en_monitoring);
 	if (err)
@@ -1428,8 +1281,7 @@ static __devinit int exynos5_busfreq_mif_probe(struct platform_device *pdev)
 
 	pr_info("init_volt[%d], freq[%lu]\n", init_volt, data->devfreq->max_freq);
 
-	regulator_set_voltage(exynos5_vdd_mif.vdd_target, init_volt, SAFE_VOLT(init_volt));
-
+	err = exynos5_volt_ctrl(VDD_MIF, init_volt, data->devfreq->max_freq);
 	__raw_writel(((dll_lock_and_forcing(phy1_base) & 0x7f) << 16) |
 					((dll_lock_and_forcing(phy0_base) & 0x7f)), EXYNOS_PMU_SPARE1);
 
@@ -1524,7 +1376,7 @@ static int __init exynos5_busfreq_mif_init(void)
 {
 	return platform_driver_register(&exynos5_busfreq_mif_driver);
 }
-subsys_initcall(exynos5_busfreq_mif_init);
+late_initcall(exynos5_busfreq_mif_init);
 
 static void __exit exynos5_busfreq_mif_exit(void)
 {

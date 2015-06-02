@@ -60,7 +60,6 @@
 #include <linux/kmod.h>
 #include <linux/capability.h>
 #include <linux/binfmts.h>
-#include <linux/runtime_dependency.h>
 
 #include <asm/uaccess.h>
 #include <asm/processor.h>
@@ -129,7 +128,7 @@ static int __maybe_unused two = 2;
 static int __maybe_unused three = 3;
 static unsigned long one_ul = 1;
 static int one_hundred = 100;
-#ifdef CONFIG_ZSWAP
+#ifdef CONFIG_INCREASE_MAXIMUM_SWAPPINESS
 extern int max_swappiness;
 #endif
 #ifdef CONFIG_PRINTK
@@ -999,13 +998,6 @@ static struct ctl_table kern_table[] = {
 		.proc_handler	= proc_dointvec,
 	},
 #endif
-	{
-		.procname	= "runtime_dependency",
-		.data		= &rt_dependency_state,
-		.maxlen		= sizeof(u64),
-		.mode		= 0644,
-		.proc_handler	= proc_rt_dependency_handler,
-	},
 	{ }
 };
 
@@ -1120,7 +1112,7 @@ static struct ctl_table vm_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= &zero,
-#ifdef CONFIG_ZSWAP
+#ifdef CONFIG_INCREASE_MAXIMUM_SWAPPINESS
 		.extra2		= &max_swappiness,
 #else
 		.extra2		= &one_hundred,

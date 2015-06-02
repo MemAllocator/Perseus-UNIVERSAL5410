@@ -23,8 +23,9 @@
 #include <mach/asv-exynos.h>
 
 #include <plat/clock.h>
+#include <mach/sec_debug.h>
 
-#define CPUFREQ_LEVEL_END_CA7	(L13 + 1)
+#define CPUFREQ_LEVEL_END_CA7	(L11 + 1)
 #define CPUFREQ_LEVEL_END_CA15	(L18 + 1)
 
 #undef PRINT_DIV_VAL
@@ -58,20 +59,18 @@ static unsigned int exynos5410_volt_table_CA15[CPUFREQ_LEVEL_END_CA15];
 struct pm_qos_request exynos5_cpu_int_qos;
 
 static struct cpufreq_frequency_table exynos5410_freq_table_CA7[] = {
-	{L0, 1500 * 1000},
-	{L1, 1400 * 1000},
-	{L2, 1300 * 1000},
-	{L3, 1200 * 1000},
-	{L4, 1100 * 1000},
-	{L5, 1000 * 1000},
-	{L6,  900 * 1000},
-	{L7,  800 * 1000},
-	{L8,  700 * 1000},
-	{L9, 600 * 1000},
-	{L10, 500 * 1000},
-	{L11, 400 * 1000},
-	{L12, 300 * 1000},
-	{L13, 200 * 1000},
+	{L0, 1300 * 1000},
+	{L1, 1200 * 1000},
+	{L2, 1100 * 1000},
+	{L3, 1000 * 1000},
+	{L4,  900 * 1000},
+	{L5,  800 * 1000},
+	{L6,  700 * 1000},
+	{L7,  600 * 1000},
+	{L8,  500 * 1000},
+	{L9,  400 * 1000},
+	{L10, 300 * 1000},
+	{L11, 200 * 1000},
 	{0, CPUFREQ_TABLE_END},
 };
 
@@ -106,47 +105,41 @@ static unsigned int clkdiv_cpu0_5410_CA7[CPUFREQ_LEVEL_END_CA7][5] = {
 	 * Clock divider value for following
 	 * { KFC, ACLK, HPM, PCLK, KPLL }
 	 */
-	 
-	/* ARM L0: 1.5GHz */
+
+	/* ARM L0: 1.3GHz */
 	{ 0, 2, 7, 6, 3 },
 
-	/* ARM L0: 1.4GHz */
-	{ 0, 2, 7, 6, 3 },
-
-	/* ARM L1: 1.3GHz */
-	{ 0, 2, 7, 6, 3 },
-
-	/* ARM L2: 1.2GMHz */
+	/* ARM L1: 1.2GMHz */
 	{ 0, 2, 7, 5, 3 },
 
-	/* ARM L3: 1.1GMHz */
+	/* ARM L2: 1.1GMHz */
 	{ 0, 2, 7, 5, 3 },
 
-	/* ARM L4: 1GHz */
+	/* ARM L3: 1GHz */
 	{ 0, 2, 7, 5, 3 },
 
-	/* ARM L5: 900MHz */
+	/* ARM L4: 900MHz */
 	{ 0, 2, 7, 5, 3 },
 
-	/* ARM L6: 800MHz */
+	/* ARM L5: 800MHz */
 	{ 0, 2, 7, 5, 3 },
 
-	/* ARM L7: 700MHz */
+	/* ARM L6: 700MHz */
 	{ 0, 2, 7, 4, 3 },
 
-	/* ARM L8: 600MHz */
+	/* ARM L7: 600MHz */
 	{ 0, 2, 7, 4, 3 },
 
-	/* ARM L9: 500MHz */
+	/* ARM L8: 500MHz */
 	{ 0, 2, 7, 4, 3 },
 
-	/* ARM L10: 400MHz */
+	/* ARM L9: 400MHz */
 	{ 0, 2, 7, 3, 3 },
 
-	/* ARM L11: 300MHz */
+	/* ARM L10: 300MHz */
 	{ 0, 2, 7, 3, 3 },
 
-	/* ARM L12: 200MHz */
+	/* ARM L11: 200MHz */
 	{ 0, 2, 7, 3, 3 },
 };
 
@@ -279,51 +272,45 @@ unsigned int clkdiv_cpu1_5410_CA15[CPUFREQ_LEVEL_END_CA15][2] = {
 };
 
 static unsigned int exynos5410_kpll_pms_table_CA7[CPUFREQ_LEVEL_END_CA7] = {
-	/* KPLL FOUT L0: 1.5GHz */
-	((250 << 16) | (4 << 8) | (0x0)),
-
-	/* KPLL FOUT L1: 1.4GHz */
-	((175 << 16) | (3 << 8) | (0x0)),
-
-	/* KPLL FOUT L2: 1.3GHz */
+	/* KPLL FOUT L0: 1.3GHz */
 	((325 << 16) | (6 << 8) | (0x0)),
 
-	/* KPLL FOUT L3: 1.2GHz */
+	/* KPLL FOUT L1: 1.2GHz */
 	((200 << 16) | (2 << 8) | (0x1)),
 
-	/* KPLL FOUT L4: 1.1GHz */
+	/* KPLL FOUT L2: 1.1GHz */
 	((275 << 16) | (3 << 8) | (0x1)),
 
-	/* KPLL FOUT L5: 1GHz */
+	/* KPLL FOUT L3: 1GHz */
 	((250 << 16) | (3 << 8) | (0x1)),
 
-	/* KPLL FOUT L6: 900MHz */
+	/* KPLL FOUT L4: 900MHz */
 	((150 << 16) | (2 << 8) | (0x1)),
 
-	/* KPLL FOUT L7: 800MHz */
+	/* KPLL FOUT L5: 800MHz */
 	((200 << 16) | (3 << 8) | (0x1)),
 
-	/* KPLL FOUT L8: 700MHz */
+	/* KPLL FOUT L6: 700MHz */
 	((175 << 16) | (3 << 8) | (0x1)),
 
-	/* KPLL FOUT L9: 600MHz */
+	/* KPLL FOUT L7: 600MHz */
 	((150 << 16) | (3 << 8) | (0x1)),
 
-	/* KPLL FOUT L10: 500MHz */
+	/* KPLL FOUT L8: 500MHz */
 	((250 << 16) | (3 << 8) | (0x2)),
 
-	/* KPLL FOUT L11: 400MHz */
+	/* KPLL FOUT L9: 400MHz */
 	((200 << 16) | (3 << 8) | (0x2)),
 
-	/* KPLL FOUT L12: 300MHz */
+	/* KPLL FOUT L10: 300MHz */
 	((150 << 16) | (3 << 8) | (0x2)),
 
-	/* KPLL FOUT L13: 200MHz */
+	/* KPLL FOUT L11: 200MHz */
 	((200 << 16) | (3 << 8) | (0x3)),
 };
 
 static unsigned int exynos5410_apll_pms_table_CA15[CPUFREQ_LEVEL_END_CA15] = {
-	/* APLL FOUT L0: 2.0GHz */
+	/* APLL FOUT L0: 2Hz */
 	((250 << 16) | (3 << 8) | (0x0)),
 
 	/* APLL FOUT L1: 1.9GHz */
@@ -386,20 +373,33 @@ static unsigned int exynos5410_apll_pms_table_CA15[CPUFREQ_LEVEL_END_CA15] = {
  */
 
 static const unsigned int asv_voltage_5410_CA7[CPUFREQ_LEVEL_END_CA7] = {
-	1225000,	/* L0 1500 */
-	1225000,	/* L1 1400 */
-	1225000,	/* L2 1300 */
-	1225000,	/* L3 1200 */
-	1225000,	/* L4 1100 */
-	1225000,	/* L5 1000 */
-	1225000,	/* L6  900 */
-	1225000,	/* L7  800 */
-	1225000,	/* L8  700 */
-	1225000,	/* L9  600 */
-	1125000,	/* L10 500 */
-	 975000,	/* L11 400 */
-	 900000,	/* L12 300 */
-	 900000,	/* L13 200 */
+	1225000,	/* LO 1300 */
+	1225000,	/* L1 1200 */
+	1225000,	/* L2 1100 */
+	1225000,	/* L3 1000 */
+	1225000,	/* L4  900 */
+	1225000,	/* L5  800 */
+	1225000,	/* L6  700 */
+	1225000,	/* L7  600 */
+	1125000,	/* L8  500 */
+	 975000,	/* L9  400 */
+	 900000,	/* L10 300 */
+	 900000,	/* L11 200 */
+};
+
+static const unsigned int asv_voltage_5410_CA7_evt1[CPUFREQ_LEVEL_END_CA7] = {
+	1387500,	/* L0 1300 */
+	1387500,	/* L1 1200 */
+	1387500,	/* L2 1100 */
+	1387500,	/* L3 1000 */
+	1387500,	/* L4  900 */
+	1387500,	/* L5  800 */
+	1300000,	/* L6  700 */
+	1200000,	/* L7  600 */
+	1087500,	/* L8  500 */
+	1012500,	/* L9  400 */
+	 937500,	/* L10 300 */
+	 900000,	/* L11 200 */
 };
 
 static const unsigned int asv_voltage_5410_CA15[CPUFREQ_LEVEL_END_CA15] = {
@@ -423,6 +423,68 @@ static const unsigned int asv_voltage_5410_CA15[CPUFREQ_LEVEL_END_CA15] = {
 	 825000,	/* L17  300 */
 	 800000,	/* L18  200 */
 };
+
+static const unsigned int asv_voltage_5410_CA15_evt1[CPUFREQ_LEVEL_END_CA15] = {
+	1300000,	/* L0  2000 */
+	1300000,	/* L1  1900 */
+	1300000,	/* L2  1800 */
+	1300000,	/* L3  1700 */
+	1237500,	/* L4  1600 */
+	1200000,	/* L5  1500 */
+	1150000,	/* L6  1400 */
+	1100000,	/* L7  1300 */
+	1075000,	/* L8  1200 */
+	1037500,	/* L9  1100 */
+	1000000,	/* L10 1000 */
+	 962500,	/* L11  900 */
+	 925000,	/* L12  800 */
+	 900000,	/* L13  700 */
+	 900000,	/* L14  600 */
+	 900000,	/* L15  500 */
+	 900000,	/* L16  400 */
+	 900000,	/* L17  300 */
+	 900000,	/* L18  200 */
+};
+
+/*
+ * This frequency value is selected as a max dvfs level depends
+ * on the number of big cluster's working cpus
+ * If one big cpu is working and other cpus are LITTLE, big cpu
+ * can go to max_op_freq_b[0] frequency
+ */
+#ifdef CONFIG_ARM_EXYNOS_IKS_CPUFREQ
+static const unsigned int exynos5410_max_op_freq_b_evt1[NR_CPUS + 1] = {
+	UINT_MAX,
+	1000000,
+	1000000,
+	1000000,
+	1000000,
+};
+
+static const unsigned int exynos5410_max_op_freq_b_evt2[NR_CPUS + 1] = {
+	UINT_MAX,
+	1800000,
+	1800000,
+	1700000,
+	1600000,
+};
+#else
+static const unsigned int exynos5410_max_op_freq_b_evt1[NR_CPUS + 1] = {
+	UINT_MAX,
+	1000000,
+	1000000,
+	1000000,
+	1000000,
+};
+
+static const unsigned int exynos5410_max_op_freq_b_evt2[NR_CPUS + 1] = {
+	UINT_MAX,
+	1600000,
+	1600000,
+	1600000,
+	1600000,
+};
+#endif
 
 static void exynos5410_set_ema_CA15(unsigned int target_volt)
 {
@@ -557,7 +619,7 @@ static void exynos5410_set_kpll_CA7(unsigned int new_index, unsigned int old_ind
 	} while (tmp != (0x1 << EXYNOS5_CLKSRC_KFC_MUXCORE_SHIFT));
 
 	/* 6. restore original div value */
-	if ((new_index < L8) && (old_index < L8))
+	if ((new_index < L5) && (old_index < L5))
 		exynos5410_set_clkdiv_CA7(new_index);
 
 }
@@ -630,6 +692,10 @@ static void exynos5410_set_frequency_CA7(unsigned int old_index,
 {
 	unsigned int tmp;
 
+	sec_debug_aux_log(SEC_DEBUG_AUXLOG_CPU_CLOCK_SWITCH_CHANGE,
+		"[A07] old:%7d new:%7d",
+		exynos5410_freq_table_CA7[old_index].frequency, exynos5410_freq_table_CA7[new_index].frequency);
+
 	if (pm_qos_request_active(&exynos5_cpu_int_qos))
 		pm_qos_update_request(&exynos5_cpu_int_qos, 0);
 
@@ -675,6 +741,10 @@ static void exynos5410_set_frequency_CA15(unsigned int old_index,
 					  unsigned int new_index)
 {
 	unsigned int tmp;
+
+	sec_debug_aux_log(SEC_DEBUG_AUXLOG_CPU_CLOCK_SWITCH_CHANGE,
+		"[A15] old:%7d new:%7d",
+		exynos5410_freq_table_CA15[old_index].frequency, exynos5410_freq_table_CA15[new_index].frequency);
 
 	if (old_index > new_index) {
 		/* Before change clock rate, lock INT clock to garantee INT LVcc */
@@ -734,20 +804,41 @@ static void __init set_volt_table_CA7(void)
 	unsigned int asv_volt __maybe_unused;
 
 	for (i = 0; i < CPUFREQ_LEVEL_END_CA7; i++) {
-		asv_volt = get_match_volt(ID_KFC, exynos5410_freq_table_CA7[i].frequency);
+		/* FIXME: need to update voltage table for REV1 */
+		if (samsung_rev() < EXYNOS5410_REV_1_0) {
+			exynos5410_volt_table_CA7[i] = asv_voltage_5410_CA7[i];
+		} else {
+			asv_volt = get_match_volt(ID_KFC, exynos5410_freq_table_CA7[i].frequency);
 
-		exynos5410_volt_table_CA7[i] = asv_volt;
+			if (!asv_volt)
+				exynos5410_volt_table_CA7[i] = asv_voltage_5410_CA7_evt1[i];
+			else
+				exynos5410_volt_table_CA7[i] = asv_volt;
+		}
 
 		pr_info("CPUFREQ of CA7  L%d : %d uV\n", i,
 				exynos5410_volt_table_CA7[i]);
 	}
 
-	max_support_idx_CA7 = L0;	
+	max_support_idx_CA7 = L1;
 
-	//exynos5410_freq_table_CA7[L0].frequency = CPUFREQ_ENTRY_INVALID;
-	//exynos5410_freq_table_CA7[L1].frequency = CPUFREQ_ENTRY_INVALID;
+	exynos5410_freq_table_CA7[L0].frequency = CPUFREQ_ENTRY_INVALID;
+	if (samsung_rev() < EXYNOS5410_REV_2_0) {
+		exynos5410_freq_table_CA7[L1].frequency = CPUFREQ_ENTRY_INVALID;
+		exynos5410_freq_table_CA7[L2].frequency = CPUFREQ_ENTRY_INVALID;
+		exynos5410_freq_table_CA7[L3].frequency = CPUFREQ_ENTRY_INVALID;
+		exynos5410_freq_table_CA7[L4].frequency = CPUFREQ_ENTRY_INVALID;
+		exynos5410_freq_table_CA7[L5].frequency = CPUFREQ_ENTRY_INVALID;
+		exynos5410_freq_table_CA7[L6].frequency = CPUFREQ_ENTRY_INVALID;
 
-	min_support_idx_CA7 = L13;
+		max_support_idx_CA7 = L7;
+	}
+
+	exynos5410_freq_table_CA7[L9].frequency = CPUFREQ_ENTRY_INVALID;
+	exynos5410_freq_table_CA7[L10].frequency = CPUFREQ_ENTRY_INVALID;
+	exynos5410_freq_table_CA7[L11].frequency = CPUFREQ_ENTRY_INVALID;
+
+	min_support_idx_CA7 = L8;
 }
 
 static void __init set_volt_table_CA15(void)
@@ -756,24 +847,53 @@ static void __init set_volt_table_CA15(void)
 	unsigned int asv_volt __maybe_unused;
 
 	for (i = 0; i < CPUFREQ_LEVEL_END_CA15; i++) {
-		asv_volt = get_match_volt(ID_ARM, exynos5410_freq_table_CA15[i].frequency);
+		if (samsung_rev() < EXYNOS5410_REV_1_0) {
+			exynos5410_volt_table_CA15[i] = asv_voltage_5410_CA15[i];
+		} else {
+			asv_volt = get_match_volt(ID_ARM, exynos5410_freq_table_CA15[i].frequency);
 
-		exynos5410_volt_table_CA15[i] = asv_volt;
+			if (!asv_volt)
+				exynos5410_volt_table_CA15[i] = asv_voltage_5410_CA15_evt1[i];
+			else
+				exynos5410_volt_table_CA15[i] = asv_volt;
+		}
 
 		pr_info("CPUFREQ of CA15 L%d : %d uV\n", i,
 				exynos5410_volt_table_CA15[i]);
 	}
 
-	max_support_idx_CA15 = L0;
+	max_support_idx_CA15 = L4;
 
-	exynos5410_freq_table_CA15[L13].frequency = CPUFREQ_ENTRY_INVALID;
-	exynos5410_freq_table_CA15[L14].frequency = CPUFREQ_ENTRY_INVALID;
-	exynos5410_freq_table_CA15[L15].frequency = CPUFREQ_ENTRY_INVALID;
-	exynos5410_freq_table_CA15[L16].frequency = CPUFREQ_ENTRY_INVALID;
-	exynos5410_freq_table_CA15[L17].frequency = CPUFREQ_ENTRY_INVALID;
-	exynos5410_freq_table_CA15[L18].frequency = CPUFREQ_ENTRY_INVALID;
+	exynos5410_freq_table_CA15[L0].frequency = CPUFREQ_ENTRY_INVALID;
+	exynos5410_freq_table_CA15[L1].frequency = CPUFREQ_ENTRY_INVALID;
+	exynos5410_freq_table_CA15[L2].frequency = CPUFREQ_ENTRY_INVALID;
+	exynos5410_freq_table_CA15[L3].frequency = CPUFREQ_ENTRY_INVALID;
+	if (samsung_rev() < EXYNOS5410_REV_2_0) {
+		exynos5410_freq_table_CA15[L4].frequency = CPUFREQ_ENTRY_INVALID;
+		exynos5410_freq_table_CA15[L5].frequency = CPUFREQ_ENTRY_INVALID;
+		exynos5410_freq_table_CA15[L6].frequency = CPUFREQ_ENTRY_INVALID;
+		exynos5410_freq_table_CA15[L7].frequency = CPUFREQ_ENTRY_INVALID;
+		exynos5410_freq_table_CA15[L8].frequency = CPUFREQ_ENTRY_INVALID;
+		exynos5410_freq_table_CA15[L9].frequency = CPUFREQ_ENTRY_INVALID;
 
-	min_support_idx_CA15 = L12;
+		max_support_idx_CA15 = L10;
+	}
+
+	if (samsung_rev() < EXYNOS5410_REV_2_0) {
+		exynos5410_freq_table_CA15[L17].frequency = CPUFREQ_ENTRY_INVALID;
+		exynos5410_freq_table_CA15[L18].frequency = CPUFREQ_ENTRY_INVALID;
+
+		min_support_idx_CA15 = L16;
+	} else {
+		exynos5410_freq_table_CA15[L13].frequency = CPUFREQ_ENTRY_INVALID;
+		exynos5410_freq_table_CA15[L14].frequency = CPUFREQ_ENTRY_INVALID;
+		exynos5410_freq_table_CA15[L15].frequency = CPUFREQ_ENTRY_INVALID;
+		exynos5410_freq_table_CA15[L16].frequency = CPUFREQ_ENTRY_INVALID;
+		exynos5410_freq_table_CA15[L17].frequency = CPUFREQ_ENTRY_INVALID;
+		exynos5410_freq_table_CA15[L18].frequency = CPUFREQ_ENTRY_INVALID;
+
+		min_support_idx_CA15 = L12;
+	}
 }
 
 int __init exynos5410_cpufreq_CA7_init(struct exynos_dvfs_info *info)
@@ -827,11 +947,16 @@ int __init exynos5410_cpufreq_CA7_init(struct exynos_dvfs_info *info)
 	}
 
 	info->mpll_freq_khz = rate;
-	info->pm_lock_idx = L2;
-	info->pll_safe_idx = L7;
+	info->pm_lock_idx = L0;
+	info->pll_safe_idx = L5;
 	info->max_support_idx = max_support_idx_CA7;
 	info->min_support_idx = min_support_idx_CA7;
 	info->cpu_clk = kfc_clk;
+
+	if (samsung_rev() < EXYNOS5410_REV_2_0)
+		info->max_op_freqs = exynos5410_max_op_freq_b_evt1;
+	else
+		info->max_op_freqs = exynos5410_max_op_freq_b_evt2;
 
 	info->volt_table = exynos5410_volt_table_CA7;
 	info->freq_table = exynos5410_freq_table_CA7;
@@ -933,8 +1058,10 @@ int __init exynos5410_cpufreq_CA15_init(struct exynos_dvfs_info *info)
 #else
 	info->cpu_clk = cpu_clk;
 #endif
-	
-	pr_info("SAMSUNG REV: 0x%x\n", samsung_rev());
+	if (samsung_rev() < EXYNOS5410_REV_2_0)
+		info->max_op_freqs = exynos5410_max_op_freq_b_evt1;
+	else
+		info->max_op_freqs = exynos5410_max_op_freq_b_evt2;
 
 	info->volt_table = exynos5410_volt_table_CA15;
 	info->freq_table = exynos5410_freq_table_CA15;
